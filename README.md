@@ -1,104 +1,64 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-</head>
-<body>
-    <!-- Button to update data -->
-    <button id="updateData">Update Data</button>
-    <!-- Input for selecting town count -->
-    <input type="range" id="town-count" min="1" max="500" value="50">
-    <!-- SVG element for the map -->
-    <svg id="map">
-        <image xlink:href="united-kingdom.svg" width="100%" height="100%"></image>
-    </svg>
+import string
+def load_values(file_path):
+    values = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            try:
+                letter, value = line.strip().split()
+                values[letter] = int(value)
+            except ValueError:
+                pass
+    return values
 
-    <script>
-        //References:
-        //https://observablehq.com/@d3/gallery?utm_source=d3js-org&utm_medium=nav&utm_campaign=try-observable
-        // Define SVG dimensions
-        const mapWidth = 900;
-        const mapHeight = 1100;
 
-        // Select the SVG element
-        const mapSvg = d3.select("#map")
-            .attr("width", mapWidth)
-            .attr("height", mapHeight);
+def calculate_score(letter, position, is_first, is_last, values):
+    try:
+        if is_first:
+            return 0
+        elif is_last:
+            return 20 if letter == 'E' else 5
+        else:
+            position_value = 1 if position == 2 else (2 if position == 3 else 3)
+            return position_value + values.get(letter, 0)
+    except KeyError:
+        return 0
+    return values
 
-        // Define the map projection
-        const mapProjection = d3.geoAlbers()
-            .center([0, 55.4])
-            .rotate([3.4, 0])
-            .scale(6000)
-            .translate([mapWidth / 2, mapHeight / 2]);
 
-        // Create a path generator based on the projection
-        const mapPath = d3.geoPath().projection(mapProjection);
 
-        // Creating a group for circles and labels
-        const mapGroup = mapSvg.append("g");
+def generate_abbreviations(name, values):
+    words = [word.strip(string.punctuation) for word in name.split()]
+    abbreviations = set()
+    for word in words:
+        first_letter = word[0]
+        for i in range(1, len(word) - 1):
+            second_letter = word[i]
+            for j in range(i + 1, len(word)):
+                third_letter = word[j]
+                abbreviation = f"{first_letter}{second_letter}{third_letter}"
+                score = calculate_score(second_letter, i, False, j == len(word) - 1, values) + calculate_score(third_letter, j, False, True, values)
+                abbreviations.add((abbreviation, score))
+    return abbreviations
 
-        // Function to plot towns on the map
-        function plotMapTowns(cityData) {
-            // Remove existing circles and labels
-            mapSvg.selectAll("circle")
-                .transition()
-                .duration(500)
-                .attr("r", 0)
-                .remove()
-                .end()
-                .then(function() {
-                    // Add new circles towns
-                    const townCircles = mapGroup.selectAll("circle")
-                        .data(cityData)
-                        .enter()
-                        .append("circle")
-                        .attr("cx", d => mapProjection([d.lng, d.lat])[0])
-                        .attr("cy", d => mapProjection([d.lng, d.lat])[1])
-                        .attr("r", 0)
-                        .style("fill", "blue")
-                        .style("stroke", "white");
 
-                    // Transition to display circles
-                    townCircles.transition()
-                        .duration(500)
-                        .attr("r", 5);
 
-                    // Add text labels for towns
-		    //Used chatgpt to add functionality to label the towns
-                    const townLabels = mapGroup.selectAll("text")
-                        .data(cityData)
-                        .enter()
-                        .append("text")
-                        .attr("x", d => mapProjection([d.lng, d.lat])[0])
-                        .attr("y", d => mapProjection([d.lng, d.lat])[1])
-                        .attr("dy", -10)
-                        .text(d => `${d.Town}, Population: ${d.Population}`)
-                        .style("fill", "black")
-                        .style("font-size", "12px");
 
-                    // Add tooltips to circles
-                    townCircles.append("title").text(d => `${d.Town}, Population: ${d.Population}`);
-                });
-        }
+def main():
+    input_file = input("Enter the name of the input file (with .txt extension): ")
+    values_file = "values.txt" 
+    values = load_values(values_file)
+    with open(input_file, 'r') as file:
+        names = [line.strip() for line in file]
+    surname = input("Enter your surname: ")
+    output_file = f"{surname.lower()}_{input_file[:-4]}_abbrevs.txt"
+    with open(output_file, 'w') as file:
+        for name in names:
+            abbreviations = generate_abbreviations(name.upper(), values)
+            best_abbreviation, best_score = min(abbreviations, key=lambda x: x[1])
+            file.write(f"{name.upper()}: {best_abbreviation} ({best_score} points)\n")
 
-        // Function to handle data update based on the slider input
-        function handleDataUpdate() {
-            const numTowns = document.getElementById("town-count").value;
-            d3.json(`http://34.38.72.236/Circles/Towns/${numTowns}`).then(plotMapTowns);
-        }
 
-        // Event listener for slider input
-        d3.select("#town-count").on("input", handleDataUpdate);
 
-        // Initial data load and plot
-        d3.json("http://34.38.72.236/Circles/Towns/50").then(plotMapTowns);
+if __name__ == "__main__":
+    main()
 
-        // Event listener for updating data when the button is clicked
-        d3.select("#updateData").on("click", function () {
-            d3.json("http://34.38.72.236/Circles/Towns/50").then(plotMapTowns);
-        });
-    </script>
-</body>
-</html>
